@@ -1,7 +1,11 @@
 // server/index.js
 import * as dotenv from 'dotenv';
-dotenv.config();
-console.log('MongoDB URI:', process.env.MONGODB_URI);
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
+dotenv.config({ path: join(__dirname, '.env') });
 
 import express    from 'express';
 import cors       from 'cors';
@@ -9,46 +13,46 @@ import connectDB  from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import toolRoutes from './routes/toolRoutes.js';
 
-// Connect to MongoDB
 connectDB();
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ─── MIDDLEWARE ───────────────────────────────────────
+// ─── CORS — allow both local and production ────────────
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,  // We'll set this on Render
+].filter(Boolean)
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true,
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── ROUTES ───────────────────────────────────────────
 app.use('/api/auth',  authRoutes);
 app.use('/api/tools', toolRoutes);
 
-// ─── HEALTH CHECK ─────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({
     message:   '🛡️ FortiShield API is running!',
     status:    'healthy',
     version:   '1.0.0',
-    endpoints: {
-      auth:  '/api/auth',
-      tools: '/api/tools',
-    },
   });
 });
 
-// ─── 404 HANDLER ──────────────────────────────────────
 app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route ${req.originalUrl} not found.`,
-  });
+  res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found.` });
 });
 
-// ─── GLOBAL ERROR HANDLER ─────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.message);
   res.status(err.status || 500).json({
@@ -57,8 +61,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── START SERVER ─────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV}`);
 });
